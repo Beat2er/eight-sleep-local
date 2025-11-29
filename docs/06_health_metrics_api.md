@@ -288,41 +288,55 @@ TODO: Handle multiple intervals
 
 ### Presence Detection
 
-**Problem**: No direct `isPresent` field in API. Presence is detected internally by biometrics processor but not exposed.
+**Status**: ✅ IMPLEMENTED
 
-**Internal Implementation (free-sleep)**:
-In `biometrics/stream/biometric_processor.py`, presence is detected via piezo sensor signal range:
-```python
-def detect_presence(self, signal: np.ndarray):
-    signal_range = np.ptp(signal)
-    if signal_range > 200_000:
-        self.present = True
-        self.present_for += 1
+**Endpoint**: `GET /api/presence`
+
+**Response**:
+```json
+{
+  "left": { "present": true, "lastUpdated": "2025-01-15T08:30:00Z" },
+  "right": { "present": false, "lastUpdated": "2025-01-15T07:45:00Z" }
+}
 ```
-- Threshold: signal range > 200,000 indicates presence
-- Tracked via `self.present` and `self.present_for` counter
-- **NOT written to database**
-- **NOT exposed via any API endpoint**
 
-**Decision**: Implement dedicated presence endpoint in free-sleep
+**Per-side endpoint**: `GET /api/presence/{side}` (where side is "left" or "right")
 
-A new endpoint will be added to free-sleep in a future step:
-- `GET /api/presence` or `GET /api/deviceStatus` with presence field
-- Returns real-time presence for each side
-- No latency issues (unlike vitals proxy approach)
-- Will enable `binary_sensor.eight_sleep_{side}_bed_presence` entity
+**Response**:
+```json
+{ "present": true, "lastUpdated": "2025-01-15T08:30:00Z" }
+```
 
-**Workaround until endpoint exists**:
-- Vitals proxy: Query recent vitals (60-120s latency)
-- `GET /api/metrics/vitals?side={side}&startTime={now-2min}`
-- If results exist → person likely present
+**Implementation Details (free-sleep)**:
+- Presence is detected via piezo sensor signal range (threshold: >200,000)
+- The biometrics stream processor (`stream_processor.py`) posts presence updates to `/api/services` when presence changes
+- The `/api/presence` endpoint reads from the services data store
+- Updates are real-time (posted on each state change, not polled)
+
+**Requirements**:
+- Biometrics must be enabled for presence detection to work
+- Presence data is only updated while the biometrics stream service is running
+
+---
+
+## API Client Methods to Add
+
+```python
+async def get_presence(self) -> dict:
+    """Get presence status for both sides."""
+    return await self.api_request("GET", "/api/presence", None)
+
+async def get_presence_side(self, side: str) -> dict:
+    """Get presence status for a specific side (left or right)."""
+    return await self.api_request("GET", f"/api/presence/{side}", None)
+```
 
 ---
 
 ## Next Steps
 
-1. **free-sleep**: Implement presence endpoint (`GET /api/presence` or add to deviceStatus)
-2. **eight-sleep-local**: Add API client methods for health metrics
+1. ~~**free-sleep**: Implement presence endpoint~~ ✅ DONE
+2. **eight-sleep-local**: Add API client methods for health metrics and presence
 3. **eight-sleep-local**: Create health sensor entities with 60s poll minimum
-4. **eight-sleep-local**: Create presence binary_sensor (once endpoint available)
+4. **eight-sleep-local**: Create presence binary_sensor
 5. Use sleep records for time range, handle intervals (TODO above)
