@@ -290,27 +290,39 @@ TODO: Handle multiple intervals
 
 **Problem**: No direct `isPresent` field in API. Presence is detected internally by biometrics processor but not exposed.
 
-**Options considered:**
-1. ❓ Vitals proxy - query recent vitals, if results exist → present (60-120s latency)
-2. ❓ Check active sleep session - complex, would need to track state
-3. ❓ Not supported - document as limitation
+**Internal Implementation (free-sleep)**:
+In `biometrics/stream/biometric_processor.py`, presence is detected via piezo sensor signal range:
+```python
+def detect_presence(self, signal: np.ndarray):
+    signal_range = np.ptp(signal)
+    if signal_range > 200_000:
+        self.present = True
+        self.present_for += 1
+```
+- Threshold: signal range > 200,000 indicates presence
+- Tracked via `self.present` and `self.present_for` counter
+- **NOT written to database**
+- **NOT exposed via any API endpoint**
 
-```
-TODO: Decide on presence detection approach
-- Option 1 (vitals proxy) seems most feasible
-- Query: GET /api/metrics/vitals?side={side}&startTime={now-2min}
-- If results.length > 0 → person is present
-- Limitation: 60s+ latency, only works when biometrics enabled
-- Alternative: Request upstream to add presence field to deviceStatus
-```
+**Decision**: Implement dedicated presence endpoint in free-sleep
+
+A new endpoint will be added to free-sleep in a future step:
+- `GET /api/presence` or `GET /api/deviceStatus` with presence field
+- Returns real-time presence for each side
+- No latency issues (unlike vitals proxy approach)
+- Will enable `binary_sensor.eight_sleep_{side}_bed_presence` entity
+
+**Workaround until endpoint exists**:
+- Vitals proxy: Query recent vitals (60-120s latency)
+- `GET /api/metrics/vitals?side={side}&startTime={now-2min}`
+- If results exist → person likely present
 
 ---
 
 ## Next Steps
 
-1. Confirm upstream approval for health metrics
-2. Implement with 60s poll for health, 5s for device status (configurable)
-3. Use sleep records for time range, handle intervals (TODO above)
-4. Decide on presence detection approach
-5. Implement API client methods
-6. Create sensor entities
+1. **free-sleep**: Implement presence endpoint (`GET /api/presence` or add to deviceStatus)
+2. **eight-sleep-local**: Add API client methods for health metrics
+3. **eight-sleep-local**: Create health sensor entities with 60s poll minimum
+4. **eight-sleep-local**: Create presence binary_sensor (once endpoint available)
+5. Use sleep records for time range, handle intervals (TODO above)
