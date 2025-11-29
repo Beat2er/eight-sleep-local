@@ -1,22 +1,15 @@
 import logging
-from datetime import timedelta
 
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    CoordinatorEntity,
-)
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DOMAIN
-from custom_components.eight_sleep_local.localEight.device import LocalEightSleep
+from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-UPDATE_INTERVAL = timedelta(seconds=5)
 
 # Use the string "temperature" directly for the device class.
 DEVICE_CLASS_TEMPERATURE = "temperature"
@@ -77,16 +70,10 @@ HUB_ATTRIBUTES = ("is_priming", "water_level")
 async def async_setup_entry(
         hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
-    host = entry.data.get("host", "localhost")
-    port = entry.data.get("port", 8080)
-
-    client = LocalEightSleep(host=host, port=port)
-    await client.start()
-
-    coordinator = EightSleepDataUpdateCoordinator(
-        hass, client=client, update_interval=UPDATE_INTERVAL
-    )
-    await coordinator.async_config_entry_first_refresh()
+    """Set up Eight Sleep sensors."""
+    # Get coordinator from hass.data (created in __init__.py)
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    coordinator = entry_data["coordinator"]
 
     def create_entity(side, attr_key):
         sensor_info = SENSOR_TYPES[attr_key]
@@ -112,23 +99,6 @@ async def async_setup_entry(
 
     async_add_entities(left_entities + right_entities + hub_entities)
 
-class EightSleepDataUpdateCoordinator(DataUpdateCoordinator):
-    def __init__(self, hass: HomeAssistant, client: LocalEightSleep, update_interval):
-        super().__init__(
-            hass,
-            _LOGGER,
-            name="eight_sleep_local_coordinator",
-            update_interval=update_interval,
-        )
-        self.client = client
-
-    async def _async_update_data(self):
-        try:
-            await self.client.update_device_data()
-            return self.client.device_data
-        except Exception as err:
-            _LOGGER.error("Error updating Eight Sleep local data: %s", err)
-            raise err
 
 class EightSleepSensor(CoordinatorEntity, SensorEntity):
     """

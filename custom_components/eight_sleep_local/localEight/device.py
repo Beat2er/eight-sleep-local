@@ -135,18 +135,179 @@ class LocalEightSleep:
             self,
             method: str,
             api_slug: str,
-            data: dict[str, Any]
+            data: dict[str, Any] | None = None
     ) -> Any:
+        """
+        Make an API request.
+
+        Returns:
+            - JSON response for 200 status
+            - True for 204 status (successful POST with no content)
+            - None on error
+        """
         assert self._api_session is not None, "Session not initialized. Call `start()` first."
         url = f"http://{self._host}:{self._port}{api_slug}"
         try:
-            async with self._api_session.request(method = method, url = url, json=data) as resp:
-                if resp.status != 200:
-                    _LOGGER.error(f"Received unexpected status code: {resp.status}")
-                    return
-                return await resp.json()
+            kwargs = {"method": method, "url": url}
+            if data is not None:
+                kwargs["json"] = data
+            async with self._api_session.request(**kwargs) as resp:
+                if resp.status == 204:
+                    return True
+                if resp.status == 200:
+                    return await resp.json()
+                _LOGGER.error(f"Received unexpected status code: {resp.status}")
+                return None
         except (ClientError, asyncio.TimeoutError, ConnectionRefusedError) as err:
-            _LOGGER.error(f"Error fetching local device data: {err}")
+            _LOGGER.error(f"Error in API request: {err}")
+            return None
+
+    # -------------------------------------------------------------------------
+    # Control Methods (POST requests)
+    # -------------------------------------------------------------------------
+
+    async def set_temperature(self, side: str, temperature_f: int, duration: int | None = None) -> bool:
+        """
+        Set target temperature for a side.
+
+        :param side: "left" or "right"
+        :param temperature_f: Target temperature in Fahrenheit (55-110)
+        :param duration: Optional duration in seconds
+        :return: True on success, False on failure
+        """
+        if temperature_f < 55 or temperature_f > 110:
+            _LOGGER.error(f"Temperature {temperature_f} out of range (55-110)")
+            return False
+
+        payload: Dict[str, Any] = {
+            side: {
+                "targetTemperatureF": temperature_f
+            }
+        }
+        if duration is not None:
+            payload[side]["secondsRemaining"] = duration
+
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
+    async def turn_on(self, side: str, duration: int = 43200) -> bool:
+        """
+        Turn on a bed side.
+
+        :param side: "left" or "right"
+        :param duration: Duration in seconds (default 12 hours)
+        :return: True on success, False on failure
+        """
+        payload = {
+            side: {
+                "isOn": True,
+                "secondsRemaining": duration
+            }
+        }
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
+    async def turn_off(self, side: str) -> bool:
+        """
+        Turn off a bed side.
+
+        :param side: "left" or "right"
+        :return: True on success, False on failure
+        """
+        payload = {
+            side: {
+                "isOn": False
+            }
+        }
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
+    async def stop_alarm(self, side: str) -> bool:
+        """
+        Stop/clear an active alarm.
+
+        :param side: "left" or "right"
+        :return: True on success, False on failure
+        """
+        payload = {
+            side: {
+                "isAlarmVibrating": False
+            }
+        }
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
+    async def start_priming(self) -> bool:
+        """
+        Start the pod priming process.
+
+        :return: True on success, False on failure
+        """
+        payload = {
+            "isPriming": True
+        }
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
+    async def trigger_alarm(
+            self,
+            side: str,
+            intensity: int = 80,
+            pattern: str = "rise",
+            duration: int = 60
+    ) -> bool:
+        """
+        Trigger alarm vibration immediately.
+
+        :param side: "left" or "right"
+        :param intensity: Vibration intensity 1-100 (default 80)
+        :param pattern: "rise" or "double" (default "rise")
+        :param duration: Duration in seconds 0-180 (default 60)
+        :return: True on success, False on failure
+        """
+        if intensity < 1 or intensity > 100:
+            _LOGGER.error(f"Alarm intensity {intensity} out of range (1-100)")
+            return False
+        if pattern not in ("rise", "double"):
+            _LOGGER.error(f"Invalid alarm pattern: {pattern}")
+            return False
+        if duration < 0 or duration > 180:
+            _LOGGER.error(f"Alarm duration {duration} out of range (0-180)")
+            return False
+
+        payload = {
+            "side": side,
+            "vibrationIntensity": intensity,
+            "vibrationPattern": pattern,
+            "duration": duration
+        }
+        result = await self.api_request("POST", "/api/alarm", payload)
+        return result is not None and result is not False
+
+    async def get_schedules(self) -> Dict[str, Any] | None:
+        """
+        Get all schedules including alarm settings.
+
+        :return: Schedules dict or None on error
+        """
+        return await self.api_request("GET", "/api/schedules", None)
+
+    async def update_alarm_schedule(self, side: str, schedule_data: Dict[str, Any]) -> bool:
+        """
+        Update alarm schedule for a side.
+
+        :param side: "left" or "right"
+        :param schedule_data: Dict with day keys and alarm settings
+            Example: {"monday": {"time": "07:00", "enabled": True, ...}, ...}
+        :return: True on success, False on failure
+        """
+        # Build payload with alarm data for each day
+        payload: Dict[str, Any] = {side: {}}
+        for day, alarm_settings in schedule_data.items():
+            payload[side][day] = {"alarm": alarm_settings}
+
+        result = await self.api_request("POST", "/api/schedules", payload)
+        return result is not None and result is not False
     # -------------------------------------------------------------------------
     # Below are convenience properties to pull out the fields from the JSON.
     # Adjust/extend these as you see fit. This matches the sample JSON structure
