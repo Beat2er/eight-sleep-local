@@ -11,7 +11,7 @@ from .localEight.device import LocalEightSleep
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "switch", "number", "button", "select", "text"]
+PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "button", "select", "text"]
 
 # Default update interval
 UPDATE_INTERVAL = timedelta(seconds=30)
@@ -34,7 +34,12 @@ class EightSleepDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from the API."""
         try:
             await self.client.update_device_data()
-            return self.client.device_data
+            # Also fetch presence data
+            presence = await self.client.get_presence()
+            return {
+                **self.client.device_data,
+                "_presence": presence or {"left": {"present": False}, "right": {"present": False}},
+            }
         except Exception as err:
             _LOGGER.error("Error updating Eight Sleep local data: %s", err)
             raise err

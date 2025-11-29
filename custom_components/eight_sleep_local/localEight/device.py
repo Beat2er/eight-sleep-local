@@ -308,6 +308,19 @@ class LocalEightSleep:
 
         result = await self.api_request("POST", "/api/schedules", payload)
         return result is not None and result is not False
+
+    async def get_presence(self) -> Dict[str, Any] | None:
+        """
+        Get presence status for both sides.
+
+        :return: Dict with left/right presence or None on error
+            Example: {
+                "left": {"present": true, "lastUpdated": "2025-01-15T08:30:00Z"},
+                "right": {"present": false, "lastUpdated": "2025-01-15T07:45:00Z"}
+            }
+        """
+        return await self.api_request("GET", "/api/presence", None)
+
     # -------------------------------------------------------------------------
     # Below are convenience properties to pull out the fields from the JSON.
     # Adjust/extend these as you see fit. This matches the sample JSON structure
