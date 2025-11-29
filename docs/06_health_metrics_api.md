@@ -336,7 +336,19 @@ async def get_presence_side(self, side: str) -> dict:
 ## Next Steps
 
 1. ~~**free-sleep**: Implement presence endpoint~~ ✅ DONE
-2. **eight-sleep-local**: Add API client methods for health metrics and presence
-3. **eight-sleep-local**: Create health sensor entities with 60s poll minimum
-4. **eight-sleep-local**: Create presence binary_sensor
-5. Use sleep records for time range, handle intervals (TODO above)
+2. ~~**eight-sleep-local**: Add API client methods for health metrics and presence~~ ✅ DONE
+3. ~~**eight-sleep-local**: Create health sensor entities with 60s poll minimum~~ ✅ DONE
+4. ~~**eight-sleep-local**: Create presence binary_sensor~~ ✅ DONE
+5. Use sleep records for time range, handle intervals (implemented - uses last sleep record)
+
+## Implemented Health Sensors
+
+Per side (left/right):
+- `sensor.eight_sleep_{side}_heart_rate` - Average heart rate (last night)
+- `sensor.eight_sleep_{side}_heart_rate_min` - Minimum heart rate (last night)
+- `sensor.eight_sleep_{side}_heart_rate_max` - Maximum heart rate (last night)
+- `sensor.eight_sleep_{side}_hrv` - Average HRV (last night)
+- `sensor.eight_sleep_{side}_breathing_rate` - Average breathing rate (last night)
+- `sensor.eight_sleep_{side}_sleep_duration` - Sleep duration in hours (last night)
+- `sensor.eight_sleep_{side}_times_out_of_bed` - Times left bed (last night)
+- `binary_sensor.eight_sleep_{side}_bed_presence` - Currently in bed

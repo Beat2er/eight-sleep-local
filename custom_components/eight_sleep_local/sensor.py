@@ -1,6 +1,6 @@
 import logging
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -99,6 +99,29 @@ async def async_setup_entry(
 
     async_add_entities(left_entities + right_entities + hub_entities)
 
+    # Add health metrics sensors
+    health_coordinator = entry_data.get("health_coordinator")
+    if health_coordinator:
+        health_entities = [
+            # Left side health sensors
+            EightSleepHeartRateSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepHeartRateMinSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepHeartRateMaxSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepHRVSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepBreathingRateSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepSleepDurationSensor(health_coordinator, entry.entry_id, "left"),
+            EightSleepTimesOutOfBedSensor(health_coordinator, entry.entry_id, "left"),
+            # Right side health sensors
+            EightSleepHeartRateSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepHeartRateMinSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepHeartRateMaxSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepHRVSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepBreathingRateSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepSleepDurationSensor(health_coordinator, entry.entry_id, "right"),
+            EightSleepTimesOutOfBedSensor(health_coordinator, entry.entry_id, "right"),
+        ]
+        async_add_entities(health_entities)
+
 
 class EightSleepSensor(CoordinatorEntity, SensorEntity):
     """
@@ -183,3 +206,209 @@ class EightSleepBinarySensor(CoordinatorEntity, BinarySensorEntity):
             "manufacturer": "Eight Sleep (Local)",
             "model": "Pod vLocal",
         }
+
+
+# =============================================================================
+# Health Metrics Sensors
+# =============================================================================
+
+class EightSleepHealthBaseSensor(CoordinatorEntity, SensorEntity):
+    """Base class for health metrics sensors."""
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the health sensor."""
+        super().__init__(coordinator)
+        self._side = side
+        self._entry_id = entry_id
+
+    @property
+    def device_info(self):
+        """Return device info."""
+        host = self.coordinator.client._host
+        port = self.coordinator.client._port
+        return {
+            "identifiers": {(DOMAIN, f"eight_sleep_{self._side}_device_{host}_{port}")},
+            "name": f"Eight Sleep – {self._side.capitalize()}",
+            "manufacturer": "Eight Sleep (Local)",
+            "model": "Pod vLocal",
+        }
+
+    def _get_vitals_summary(self) -> dict | None:
+        """Get vitals summary for this side."""
+        data = self.coordinator.data or {}
+        side_data = data.get(self._side, {})
+        return side_data.get("vitals_summary")
+
+    def _get_sleep_record(self) -> dict | None:
+        """Get sleep record for this side."""
+        data = self.coordinator.data or {}
+        side_data = data.get(self._side, {})
+        return side_data.get("sleep")
+
+
+class EightSleepHeartRateSensor(EightSleepHealthBaseSensor):
+    """Sensor for average heart rate (last night)."""
+
+    _attr_icon = "mdi:heart-pulse"
+    _attr_native_unit_of_measurement = "bpm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Heart Rate"
+        self._attr_unique_id = f"eight_sleep_{side}_heart_rate"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return average heart rate."""
+        summary = self._get_vitals_summary()
+        if summary:
+            return summary.get("avgHeartRate")
+        return None
+
+
+class EightSleepHeartRateMinSensor(EightSleepHealthBaseSensor):
+    """Sensor for minimum heart rate (last night)."""
+
+    _attr_icon = "mdi:heart-minus"
+    _attr_native_unit_of_measurement = "bpm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Heart Rate Min"
+        self._attr_unique_id = f"eight_sleep_{side}_heart_rate_min"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return minimum heart rate."""
+        summary = self._get_vitals_summary()
+        if summary:
+            return summary.get("minHeartRate")
+        return None
+
+
+class EightSleepHeartRateMaxSensor(EightSleepHealthBaseSensor):
+    """Sensor for maximum heart rate (last night)."""
+
+    _attr_icon = "mdi:heart-plus"
+    _attr_native_unit_of_measurement = "bpm"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Heart Rate Max"
+        self._attr_unique_id = f"eight_sleep_{side}_heart_rate_max"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return maximum heart rate."""
+        summary = self._get_vitals_summary()
+        if summary:
+            return summary.get("maxHeartRate")
+        return None
+
+
+class EightSleepHRVSensor(EightSleepHealthBaseSensor):
+    """Sensor for average HRV (last night)."""
+
+    _attr_icon = "mdi:wave"
+    _attr_native_unit_of_measurement = "ms"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} HRV"
+        self._attr_unique_id = f"eight_sleep_{side}_hrv"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return average HRV."""
+        summary = self._get_vitals_summary()
+        if summary:
+            return summary.get("avgHRV")
+        return None
+
+
+class EightSleepBreathingRateSensor(EightSleepHealthBaseSensor):
+    """Sensor for average breathing rate (last night)."""
+
+    _attr_icon = "mdi:lungs"
+    _attr_native_unit_of_measurement = "/min"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Breathing Rate"
+        self._attr_unique_id = f"eight_sleep_{side}_breathing_rate"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return average breathing rate."""
+        summary = self._get_vitals_summary()
+        if summary:
+            return summary.get("avgBreathingRate")
+        return None
+
+
+class EightSleepSleepDurationSensor(EightSleepHealthBaseSensor):
+    """Sensor for sleep duration (last night)."""
+
+    _attr_icon = "mdi:clock-outline"
+    _attr_native_unit_of_measurement = "h"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Sleep Duration"
+        self._attr_unique_id = f"eight_sleep_{side}_sleep_duration"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return sleep duration in hours."""
+        sleep = self._get_sleep_record()
+        if sleep:
+            seconds = sleep.get("sleep_period_seconds", 0)
+            if seconds:
+                return round(seconds / 3600, 1)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Return additional sleep attributes."""
+        sleep = self._get_sleep_record()
+        if sleep:
+            return {
+                "entered_bed_at": sleep.get("entered_bed_at"),
+                "left_bed_at": sleep.get("left_bed_at"),
+                "sleep_period_seconds": sleep.get("sleep_period_seconds"),
+            }
+        return {}
+
+
+class EightSleepTimesOutOfBedSensor(EightSleepHealthBaseSensor):
+    """Sensor for times out of bed (last night)."""
+
+    _attr_icon = "mdi:bed-empty"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(self, coordinator, entry_id: str, side: str) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator, entry_id, side)
+        self._attr_name = f"Eight Sleep {side.capitalize()} Times Out of Bed"
+        self._attr_unique_id = f"eight_sleep_{side}_times_out_of_bed"
+
+    @property
+    def native_value(self) -> int | None:
+        """Return times exited bed."""
+        sleep = self._get_sleep_record()
+        if sleep:
+            return sleep.get("times_exited_bed", 0)
+        return None

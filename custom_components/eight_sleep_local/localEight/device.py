@@ -322,6 +322,110 @@ class LocalEightSleep:
         return await self.api_request("GET", "/api/presence", None)
 
     # -------------------------------------------------------------------------
+    # Health Metrics Methods
+    # -------------------------------------------------------------------------
+
+    async def get_vitals(
+        self,
+        side: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None
+    ) -> List[Dict[str, Any]] | None:
+        """
+        Get raw vitals records (heart rate, HRV, breathing rate).
+
+        :param side: "left" or "right" (optional)
+        :param start_time: ISO datetime string (optional)
+        :param end_time: ISO datetime string (optional)
+        :return: List of vitals records or None on error
+        """
+        params = []
+        if side:
+            params.append(f"side={side}")
+        if start_time:
+            params.append(f"startTime={start_time}")
+        if end_time:
+            params.append(f"endTime={end_time}")
+
+        query = f"?{'&'.join(params)}" if params else ""
+        return await self.api_request("GET", f"/api/metrics/vitals{query}", None)
+
+    async def get_vitals_summary(
+        self,
+        side: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None
+    ) -> Dict[str, Any] | None:
+        """
+        Get aggregated vitals summary (avg/min/max heart rate, avg HRV, avg breathing rate).
+
+        :param side: "left" or "right" (optional)
+        :param start_time: ISO datetime string (optional)
+        :param end_time: ISO datetime string (optional)
+        :return: Summary dict or None on error
+        """
+        params = []
+        if side:
+            params.append(f"side={side}")
+        if start_time:
+            params.append(f"startTime={start_time}")
+        if end_time:
+            params.append(f"endTime={end_time}")
+
+        query = f"?{'&'.join(params)}" if params else ""
+        return await self.api_request("GET", f"/api/metrics/vitals/summary{query}", None)
+
+    async def get_sleep_records(
+        self,
+        side: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None
+    ) -> List[Dict[str, Any]] | None:
+        """
+        Get sleep session records.
+
+        :param side: "left" or "right" (optional)
+        :param start_time: Filter by left_bed_at >= startTime (optional)
+        :param end_time: Filter by entered_bed_at <= endTime (optional)
+        :return: List of sleep records or None on error
+        """
+        params = []
+        if side:
+            params.append(f"side={side}")
+        if start_time:
+            params.append(f"startTime={start_time}")
+        if end_time:
+            params.append(f"endTime={end_time}")
+
+        query = f"?{'&'.join(params)}" if params else ""
+        return await self.api_request("GET", f"/api/metrics/sleep{query}", None)
+
+    async def get_movement(
+        self,
+        side: str | None = None,
+        start_time: str | None = None,
+        end_time: str | None = None
+    ) -> List[Dict[str, Any]] | None:
+        """
+        Get movement records.
+
+        :param side: "left" or "right" (optional)
+        :param start_time: ISO datetime string (optional)
+        :param end_time: ISO datetime string (optional)
+        :return: List of movement records or None on error
+        """
+        params = []
+        if side:
+            params.append(f"side={side}")
+        if start_time:
+            params.append(f"startTime={start_time}")
+        if end_time:
+            params.append(f"endTime={end_time}")
+
+        query = f"?{'&'.join(params)}" if params else ""
+        return await self.api_request("GET", f"/api/metrics/movement{query}", None)
+
+    # -------------------------------------------------------------------------
     # Below are convenience properties to pull out the fields from the JSON.
     # Adjust/extend these as you see fit. This matches the sample JSON structure
     # you provided:
