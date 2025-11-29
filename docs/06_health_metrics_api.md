@@ -265,10 +265,52 @@ async def get_movement(
 
 ---
 
+## Implementation Decisions
+
+### Polling Frequency
+
+| Data Type | Poll Interval | Rationale |
+|-----------|---------------|-----------|
+| Device status (temp, power) | 5s (configurable) | Real-time control |
+| Vitals/health metrics | 60s minimum | Data only updates every 60s on pod |
+
+### Time Range for Summary Stats
+
+**Decision**: Use last sleep record's `entered_bed_at` → `left_bed_at`
+
+```
+TODO: Handle multiple intervals
+- What if user gets up at night? Could create gaps in data
+- Sleep record has `present_intervals` array - may need to query
+  vitals for each interval separately and aggregate
+- Or just use full sleep period and accept gaps in data
+```
+
+### Presence Detection
+
+**Problem**: No direct `isPresent` field in API. Presence is detected internally by biometrics processor but not exposed.
+
+**Options considered:**
+1. ❓ Vitals proxy - query recent vitals, if results exist → present (60-120s latency)
+2. ❓ Check active sleep session - complex, would need to track state
+3. ❓ Not supported - document as limitation
+
+```
+TODO: Decide on presence detection approach
+- Option 1 (vitals proxy) seems most feasible
+- Query: GET /api/metrics/vitals?side={side}&startTime={now-2min}
+- If results.length > 0 → person is present
+- Limitation: 60s+ latency, only works when biometrics enabled
+- Alternative: Request upstream to add presence field to deviceStatus
+```
+
+---
+
 ## Next Steps
 
 1. Confirm upstream approval for health metrics
-2. Decide on time range strategy
-3. Implement API client methods
-4. Create sensor entities
-5. Consider adding statistics/history integration
+2. Implement with 60s poll for health, 5s for device status (configurable)
+3. Use sleep records for time range, handle intervals (TODO above)
+4. Decide on presence detection approach
+5. Implement API client methods
+6. Create sensor entities
