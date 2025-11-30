@@ -11,7 +11,7 @@ from .localEight.device import LocalEightSleep
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "button", "select", "text"]
+PLATFORMS = ["sensor", "binary_sensor", "switch", "number", "button", "select", "text", "climate"]
 
 # Default update interval for device status
 UPDATE_INTERVAL = timedelta(seconds=30)

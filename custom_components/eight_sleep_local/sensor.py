@@ -3,7 +3,7 @@ import logging
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -12,22 +12,21 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-# Use the string "temperature" directly for the device class.
-DEVICE_CLASS_TEMPERATURE = "temperature"
-
 SENSOR_TYPES = {
     "current_temp_f": {
         "name": "Current Temperature",
-        "unit": "°F",
+        "unit": UnitOfTemperature.FAHRENHEIT,
         "json_key": "currentTemperatureF",
-        "device_class": DEVICE_CLASS_TEMPERATURE,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
         "binary": False,
     },
     "target_temp_f": {
         "name": "Target Temperature",
-        "unit": "°F",
+        "unit": UnitOfTemperature.FAHRENHEIT,
         "json_key": "targetTemperatureF",
-        "device_class": DEVICE_CLASS_TEMPERATURE,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
         "binary": False,
     },
     "seconds_remaining": {
@@ -183,6 +182,8 @@ class EightSleepSensor(CoordinatorEntity, SensorEntity):
 
         if sensor_info.get("device_class"):
             self._attr_device_class = sensor_info.get("device_class")
+        if sensor_info.get("state_class"):
+            self._attr_state_class = sensor_info.get("state_class")
 
     @property
     def native_value(self):
@@ -224,6 +225,8 @@ class EightSleepBinarySensor(CoordinatorEntity, BinarySensorEntity):
         # Optionally set a device class for binary sensors if needed.
         if sensor_info.get("device_class"):
             self._attr_device_class = sensor_info.get("device_class")
+        if sensor_info.get("state_class"):
+            self._attr_state_class = sensor_info.get("state_class")
 
     @property
     def is_on(self):
