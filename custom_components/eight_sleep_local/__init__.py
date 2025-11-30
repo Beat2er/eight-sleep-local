@@ -31,6 +31,7 @@ class EightSleepDataUpdateCoordinator(DataUpdateCoordinator):
             update_interval=UPDATE_INTERVAL,
         )
         self.client = client
+        self._previous_data: dict | None = None
 
     async def _async_update_data(self):
         """Fetch data from the API."""
@@ -38,13 +39,56 @@ class EightSleepDataUpdateCoordinator(DataUpdateCoordinator):
             await self.client.update_device_data()
             # Also fetch presence data
             presence = await self.client.get_presence()
-            return {
+            new_data = {
                 **self.client.device_data,
                 "_presence": presence or {"left": {"present": False}, "right": {"present": False}},
             }
+
+            # Fire events on state changes
+            if self._previous_data is not None:
+                self._check_and_fire_events(new_data)
+
+            self._previous_data = new_data
+            return new_data
         except Exception as err:
             _LOGGER.error("Error updating Eight Sleep local data: %s", err)
             raise err
+
+    def _check_and_fire_events(self, new_data: dict) -> None:
+        """Compare with previous data and fire events on changes."""
+        for side in ("left", "right"):
+            # Check alarm state change
+            old_side = self._previous_data.get(side, {})
+            new_side = new_data.get(side, {})
+
+            old_alarm = old_side.get("isAlarmVibrating", False)
+            new_alarm = new_side.get("isAlarmVibrating", False)
+            if not old_alarm and new_alarm:
+                _LOGGER.info("Firing eight_sleep_alarm_triggered event for %s", side)
+                self.hass.bus.async_fire(
+                    "eight_sleep_alarm_triggered",
+                    {"side": side}
+                )
+
+            # Check presence state change
+            old_presence = self._previous_data.get("_presence", {}).get(side, {})
+            new_presence = new_data.get("_presence", {}).get(side, {})
+
+            old_present = old_presence.get("present", False)
+            new_present = new_presence.get("present", False)
+
+            if not old_present and new_present:
+                _LOGGER.info("Firing eight_sleep_bed_entry event for %s", side)
+                self.hass.bus.async_fire(
+                    "eight_sleep_bed_entry",
+                    {"side": side}
+                )
+            elif old_present and not new_present:
+                _LOGGER.info("Firing eight_sleep_bed_exit event for %s", side)
+                self.hass.bus.async_fire(
+                    "eight_sleep_bed_exit",
+                    {"side": side}
+                )
 
 
 class EightSleepHealthCoordinator(DataUpdateCoordinator):
