@@ -361,3 +361,47 @@ router.post('/deviceStatus', async (req: Request, res: Response) => {
 - [ ] LED brightness slider works (read + write)
 - [ ] Events fire on presence change (test with mock data changes)
 - [ ] Events fire on alarm trigger
+
+---
+
+## Implementation Status
+
+All features have been implemented:
+
+| Feature | Status | Commit |
+|---------|--------|--------|
+| Mock server diagnostic fields | ✅ Done | `5a773b2` |
+| Diagnostic sensors (sensor.py) | ✅ Done | `24484be` |
+| LED brightness API (device.py) | ✅ Done | `24484be` |
+| LED brightness number entity | ✅ Done | `24484be` |
+| HA events (bed entry/exit, alarm) | ✅ Done | `89d960c` |
+
+### Event Usage in Automations
+
+```yaml
+# Example automation for bed entry
+automation:
+  - alias: "Bed Entry - Turn off lights"
+    trigger:
+      - platform: event
+        event_type: eight_sleep_bed_entry
+        event_data:
+          side: left
+    action:
+      - service: light.turn_off
+        target:
+          entity_id: light.bedroom
+
+# Example automation for alarm triggered
+automation:
+  - alias: "Alarm - Turn on lights"
+    trigger:
+      - platform: event
+        event_type: eight_sleep_alarm_triggered
+    action:
+      - service: light.turn_on
+        target:
+          entity_id: light.bedroom
+        data:
+          brightness_pct: 50
+```
