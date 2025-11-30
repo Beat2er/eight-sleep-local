@@ -249,6 +249,25 @@ class LocalEightSleep:
         result = await self.api_request("POST", "/api/deviceStatus", payload)
         return result is not None and result is not False
 
+    async def set_led_brightness(self, brightness: int) -> bool:
+        """
+        Set LED brightness on the hub.
+
+        :param brightness: Brightness level (0-100)
+        :return: True on success, False on failure
+        """
+        if brightness < 0 or brightness > 100:
+            _LOGGER.error(f"LED brightness {brightness} out of range (0-100)")
+            return False
+
+        payload = {
+            "settings": {
+                "ledBrightness": brightness
+            }
+        }
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None and result is not False
+
     async def trigger_alarm(
             self,
             side: str,

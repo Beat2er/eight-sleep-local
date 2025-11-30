@@ -3,6 +3,7 @@ import logging
 from homeassistant.components.sensor import SensorEntity, SensorDeviceClass, SensorStateClass
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -67,6 +68,40 @@ LEFT_ATTRIBUTES = ("current_temp_f", "target_temp_f", "seconds_remaining", "is_a
 RIGHT_ATTRIBUTES = LEFT_ATTRIBUTES  # same set as left
 HUB_ATTRIBUTES = ("is_priming", "water_level")
 
+# Diagnostic sensors (hub-level info)
+DIAGNOSTIC_SENSOR_TYPES = {
+    "wifi_strength": {
+        "name": "WiFi Signal",
+        "unit": "dBm",
+        "json_key": "wifiStrength",
+        "icon": "mdi:wifi",
+    },
+    "hub_version": {
+        "name": "Hub Version",
+        "unit": None,
+        "json_key": "hubVersion",
+        "icon": "mdi:chip",
+    },
+    "cover_version": {
+        "name": "Cover Version",
+        "unit": None,
+        "json_key": "coverVersion",
+        "icon": "mdi:bed",
+    },
+    "freesleep_version": {
+        "name": "Free-Sleep Version",
+        "unit": None,
+        "json_key": "freeSleep.version",
+        "icon": "mdi:tag",
+    },
+    "freesleep_branch": {
+        "name": "Free-Sleep Branch",
+        "unit": None,
+        "json_key": "freeSleep.branch",
+        "icon": "mdi:source-branch",
+    },
+}
+
 async def async_setup_entry(
         hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
 ):
@@ -97,7 +132,13 @@ async def async_setup_entry(
         if attr_key in SENSOR_TYPES
     ]
 
-    async_add_entities(left_entities + right_entities + hub_entities)
+    # Add diagnostic sensors (hub-level)
+    diagnostic_entities = [
+        EightSleepDiagnosticSensor(coordinator, sensor_key)
+        for sensor_key in DIAGNOSTIC_SENSOR_TYPES
+    ]
+
+    async_add_entities(left_entities + right_entities + hub_entities + diagnostic_entities)
 
     # Add health metrics sensors
     health_coordinator = entry_data.get("health_coordinator")
@@ -415,3 +456,54 @@ class EightSleepTimesOutOfBedSensor(EightSleepHealthBaseSensor):
         if sleep:
             return sleep.get("times_exited_bed", 0)
         return None
+
+
+# =============================================================================
+# Diagnostic Sensors
+# =============================================================================
+
+class EightSleepDiagnosticSensor(CoordinatorEntity, SensorEntity):
+    """Diagnostic sensor for hub-level info (WiFi, versions, etc.)."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(self, coordinator, sensor_key: str) -> None:
+        """Initialize the diagnostic sensor."""
+        super().__init__(coordinator)
+        self._sensor_key = sensor_key
+        sensor_info = DIAGNOSTIC_SENSOR_TYPES[sensor_key]
+
+        self._attr_name = f"Eight Sleep {sensor_info['name']}"
+        self._attr_unique_id = f"eight_sleep_hub_{sensor_key}"
+        self._attr_native_unit_of_measurement = sensor_info.get("unit")
+        self._attr_icon = sensor_info.get("icon")
+
+    @property
+    def native_value(self):
+        """Return the sensor value."""
+        data = self.coordinator.data or {}
+        json_key = DIAGNOSTIC_SENSOR_TYPES[self._sensor_key]["json_key"]
+
+        # Handle nested keys like "freeSleep.version"
+        if "." in json_key:
+            parts = json_key.split(".")
+            value = data
+            for part in parts:
+                if isinstance(value, dict):
+                    value = value.get(part)
+                else:
+                    return None
+            return value
+        return data.get(json_key)
+
+    @property
+    def device_info(self):
+        """Return device info - associate with Hub device."""
+        host = self.coordinator.client._host
+        port = self.coordinator.client._port
+        return {
+            "identifiers": {(DOMAIN, f"eight_sleep_hub_device_{host}_{port}")},
+            "name": "Eight Sleep – Hub",
+            "manufacturer": "Eight Sleep (Local)",
+            "model": "Pod vLocal",
+        }

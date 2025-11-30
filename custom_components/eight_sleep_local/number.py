@@ -30,6 +30,8 @@ async def async_setup_entry(
         # Instant alarm settings (hub device)
         EightSleepAlarmIntensityNumber(hass, coordinator, entry.entry_id),
         EightSleepAlarmDurationNumber(hass, coordinator, entry.entry_id),
+        # LED brightness (hub device)
+        EightSleepLEDBrightnessNumber(coordinator, entry.entry_id),
     ]
 
     async_add_entities(entities)
@@ -194,6 +196,46 @@ class EightSleepAlarmDurationNumber(RestoreEntity, NumberEntity):
         return {
             "identifiers": {(DOMAIN, f"eight_sleep_hub_device_{host}_{port}")},
             "name": "Eight Sleep â€“ Hub",
+            "manufacturer": "Eight Sleep (Local)",
+            "model": "Pod vLocal",
+        }
+
+class EightSleepLEDBrightnessNumber(CoordinatorEntity, NumberEntity):
+    """Number entity for LED brightness control."""
+
+    _attr_native_min_value = 0
+    _attr_native_max_value = 100
+    _attr_native_step = 1
+    _attr_mode = NumberMode.SLIDER
+    _attr_icon = "mdi:led-on"
+
+    def __init__(self, coordinator, entry_id: str) -> None:
+        """Initialize the LED brightness number."""
+        super().__init__(coordinator)
+        self._entry_id = entry_id
+        self._attr_name = "Eight Sleep LED Brightness"
+        self._attr_unique_id = "eight_sleep_hub_led_brightness"
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current LED brightness."""
+        data = self.coordinator.data or {}
+        settings = data.get("settings", {})
+        return settings.get("ledBrightness")
+
+    async def async_set_native_value(self, value: float) -> None:
+        """Set the LED brightness."""
+        await self.coordinator.client.set_led_brightness(int(value))
+        await self.coordinator.async_request_refresh()
+
+    @property
+    def device_info(self):
+        """Return device info (hub device)."""
+        host = self.coordinator.client._host
+        port = self.coordinator.client._port
+        return {
+            "identifiers": {(DOMAIN, f"eight_sleep_hub_device_{host}_{port}")},
+            "name": "Eight Sleep – Hub",
             "manufacturer": "Eight Sleep (Local)",
             "model": "Pod vLocal",
         }
