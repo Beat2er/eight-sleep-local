@@ -194,6 +194,9 @@ class EightSleepBinarySensor(CoordinatorEntity, BinarySensorEntity):
             value = side_data.get(json_key)
         elif self.side == "hub":
             value = data.get(json_key)
+        # Handle string 'true'/'false' (e.g., waterLevel) as well as actual booleans
+        if isinstance(value, str):
+            return value.lower() == 'true'
         return bool(value)
 
     @property
