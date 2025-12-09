@@ -100,6 +100,26 @@ DIAGNOSTIC_SENSOR_TYPES = {
         "icon": "mdi:source-branch",
     },
 }
+# Sensor temperature readings (from biometrics stream, may be null if disabled)
+SENSOR_TEMP_TYPES = {
+    "ambient_temp": {
+        "name": "Ambient Temperature",
+        "json_key": "sensorTemps.ambientF",
+        "unit": UnitOfTemperature.FAHRENHEIT,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "icon": "mdi:thermometer",
+    },
+    "heatsink_temp": {
+        "name": "Heatsink Temperature",
+        "json_key": "sensorTemps.heatsinkC",
+        "unit": UnitOfTemperature.CELSIUS,
+        "device_class": SensorDeviceClass.TEMPERATURE,
+        "state_class": SensorStateClass.MEASUREMENT,
+        "icon": "mdi:thermometer-alert",
+        "entity_category": "diagnostic",
+    },
+}
 
 async def async_setup_entry(
         hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -137,7 +157,13 @@ async def async_setup_entry(
         for sensor_key in DIAGNOSTIC_SENSOR_TYPES
     ]
 
-    async_add_entities(left_entities + right_entities + hub_entities + diagnostic_entities)
+    # Add sensor temperature entities (hub-level, from biometrics stream)
+    sensor_temp_entities = [
+        EightSleepSensorTempSensor(coordinator, sensor_key)
+        for sensor_key in SENSOR_TEMP_TYPES
+    ]
+
+    async_add_entities(left_entities + right_entities + hub_entities + diagnostic_entities + sensor_temp_entities)
 
     # Add health metrics sensors
     health_coordinator = entry_data.get("health_coordinator")
@@ -498,6 +524,64 @@ class EightSleepDiagnosticSensor(CoordinatorEntity, SensorEntity):
                     return None
             return value
         return data.get(json_key)
+
+    @property
+    def device_info(self):
+        """Return device info - associate with Hub device."""
+        host = self.coordinator.client._host
+        port = self.coordinator.client._port
+        return {
+            "identifiers": {(DOMAIN, f"eight_sleep_hub_device_{host}_{port}")},
+            "name": "Eight Sleep – Hub",
+            "manufacturer": "Eight Sleep (Local)",
+            "model": "Pod vLocal",
+        }
+
+# =============================================================================
+# Sensor Temperature Sensors (from biometrics stream)
+# =============================================================================
+
+class EightSleepSensorTempSensor(CoordinatorEntity, SensorEntity):
+    """Sensor for raw temperature readings from biometrics stream."""
+
+    def __init__(self, coordinator, sensor_key: str) -> None:
+        """Initialize the sensor temp sensor."""
+        super().__init__(coordinator)
+        self._sensor_key = sensor_key
+        sensor_info = SENSOR_TEMP_TYPES[sensor_key]
+
+        self._attr_name = f"Eight Sleep {sensor_info['name']}"
+        self._attr_unique_id = f"eight_sleep_hub_{sensor_key}"
+        self._attr_native_unit_of_measurement = sensor_info.get("unit")
+        self._attr_device_class = sensor_info.get("device_class")
+        self._attr_state_class = sensor_info.get("state_class")
+        self._attr_icon = sensor_info.get("icon")
+
+        if sensor_info.get("entity_category") == "diagnostic":
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self):
+        """Return the sensor value."""
+        data = self.coordinator.data or {}
+        json_key = SENSOR_TEMP_TYPES[self._sensor_key]["json_key"]
+
+        # Handle nested keys like "sensorTemps.ambientF"
+        parts = json_key.split(".")
+        value = data
+        for part in parts:
+            if isinstance(value, dict):
+                value = value.get(part)
+            else:
+                return None
+        return value
+
+    @property
+    def available(self) -> bool:
+        """Return True if sensor temps data is available."""
+        data = self.coordinator.data or {}
+        sensor_temps = data.get("sensorTemps")
+        return sensor_temps is not None and super().available
 
     @property
     def device_info(self):
