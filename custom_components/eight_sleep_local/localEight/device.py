@@ -135,18 +135,108 @@ class LocalEightSleep:
             self,
             method: str,
             api_slug: str,
-            data: dict[str, Any]
+            data: dict[str, Any] | None = None
     ) -> Any:
+        """
+        Make an API request.
+
+        Returns:
+            - JSON response for 200 status
+            - True for 204 status (successful POST with no content)
+            - None on error
+        """
         assert self._api_session is not None, "Session not initialized. Call `start()` first."
         url = f"http://{self._host}:{self._port}{api_slug}"
         try:
-            async with self._api_session.request(method = method, url = url, json=data) as resp:
-                if resp.status != 200:
-                    _LOGGER.error(f"Received unexpected status code: {resp.status}")
-                    return
-                return await resp.json()
+            kwargs = {"method": method, "url": url}
+            if data is not None:
+                kwargs["json"] = data
+            async with self._api_session.request(**kwargs) as resp:
+                if resp.status == 204:
+                    return True
+                if resp.status == 200:
+                    return await resp.json()
+                _LOGGER.error(f"Received unexpected status code: {resp.status}")
+                return None
         except (ClientError, asyncio.TimeoutError, ConnectionRefusedError) as err:
-            _LOGGER.error(f"Error fetching local device data: {err}")
+            _LOGGER.error(f"Error in API request: {err}")
+            return None
+
+    # -------------------------------------------------------------------------
+    # Control Methods (POST requests)
+    # -------------------------------------------------------------------------
+
+    async def set_temperature(self, side: str, temperature_f: int) -> bool:
+        """Set target temperature for a side."""
+        if temperature_f < 55 or temperature_f > 110:
+            _LOGGER.error(f"Temperature {temperature_f} out of range (55-110)")
+            return False
+        payload = {side: {"targetTemperatureF": temperature_f}}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
+
+    async def turn_on(self, side: str, duration: int = 43200) -> bool:
+        """Turn on a bed side."""
+        payload = {side: {"isOn": True, "secondsRemaining": duration}}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
+
+    async def turn_off(self, side: str) -> bool:
+        """Turn off a bed side."""
+        payload = {side: {"isOn": False}}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
+
+    async def stop_alarm(self, side: str) -> bool:
+        """Stop/clear an active alarm."""
+        payload = {side: {"isAlarmVibrating": False}}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
+
+    async def trigger_alarm(
+            self,
+            side: str,
+            intensity: int = 80,
+            pattern: str = "rise",
+            duration: int = 60
+    ) -> bool:
+        """Trigger alarm vibration immediately."""
+        if intensity < 1 or intensity > 100:
+            _LOGGER.error(f"Alarm intensity {intensity} out of range (1-100)")
+            return False
+        if pattern not in ("rise", "double"):
+            _LOGGER.error(f"Invalid alarm pattern: {pattern}")
+            return False
+        if duration < 0 or duration > 180:
+            _LOGGER.error(f"Alarm duration {duration} out of range (0-180)")
+            return False
+        payload = {
+            "side": side,
+            "vibrationIntensity": intensity,
+            "vibrationPattern": pattern,
+            "duration": duration
+        }
+        result = await self.api_request("POST", "/api/alarm", payload)
+        return result is not None
+
+    async def get_presence(self) -> Dict[str, Any] | None:
+        """Get presence status for both sides."""
+        return await self.api_request("GET", "/api/metrics/presence")
+
+    async def start_priming(self) -> bool:
+        """Start the pod priming process."""
+        payload = {"isPriming": True}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
+
+    async def set_led_brightness(self, brightness: int) -> bool:
+        """Set LED brightness on the hub."""
+        if brightness < 0 or brightness > 100:
+            _LOGGER.error(f"LED brightness {brightness} out of range (0-100)")
+            return False
+        payload = {"settings": {"ledBrightness": brightness}}
+        result = await self.api_request("POST", "/api/deviceStatus", payload)
+        return result is not None
     # -------------------------------------------------------------------------
     # Below are convenience properties to pull out the fields from the JSON.
     # Adjust/extend these as you see fit. This matches the sample JSON structure
