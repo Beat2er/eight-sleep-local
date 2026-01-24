@@ -11,7 +11,7 @@ from .localEight.device import LocalEightSleep
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor"]
+PLATFORMS = ["sensor", "button", "number", "select"]
 
 # Default update interval for device status
 UPDATE_INTERVAL = timedelta(seconds=30)
@@ -61,6 +61,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "client": client,
         "coordinator": coordinator,
+        "instant_alarm_settings": {
+            "intensity": 80,
+            "pattern": "rise",
+            "duration": 60,
+        },
     }
 
     # Forward setup to platforms
